@@ -36,7 +36,7 @@ sample_size=100
 # remove output dir if exists
 if [ -d output ] ; then
     echo "Output directory already exists ! "
-    exit 1
+    # exit 1
 fi
 mkdir output
 

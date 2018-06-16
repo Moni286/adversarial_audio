@@ -7,7 +7,8 @@ import numpy as np
 import sys
 import time
 import tensorflow as tf
-from speech_commands import label_wav
+sys.path.append("speech_commands/")
+import label_wav
 
 def load_graph(filename):
     with tf.gfile.FastGFile(filename, 'rb') as f:
