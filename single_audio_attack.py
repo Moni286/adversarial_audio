@@ -155,7 +155,7 @@ flags.DEFINE_integer("max_iters", 200, "Maxmimum number of iterations")
 FLAGS = flags.FLAGS
 
 if __name__ == '__main__':
-    data_dir = FLAGS.data_dir
+    input_file = FLAGS.data_dir
     output_dir = FLAGS.output_dir
     target_label = FLAGS.target_label
     eps_limit = FLAGS.limit
@@ -167,9 +167,6 @@ if __name__ == '__main__':
     output_node_name = 'labels_softmax:0'
 
     labels = load_labels(labels_path)
-
-    wav_files_list =\
-        [f for f in os.listdir(data_dir) if f.endswith(".wav")]
     
     target_idx = [idx for idx in range(len(labels)) if labels[idx]==target_label]
     if len(target_idx) == 0:
@@ -180,35 +177,35 @@ if __name__ == '__main__':
     load_graph(graph_path)
     with tf.Session() as sess:
         output_node = sess.graph.get_tensor_by_name(output_node_name) 
-        for input_file in wav_files_list:
-            start_time = time.time()
-            x_orig = load_audiofile(data_dir+'/'+input_file)
-            #TODO(malzantot) fix
-            # x_pbs = 1
-            num_channels = int(x_orig[22]) + int(x_orig[23]*256)
-            sample_rate = int(x_orig[24]) + int(x_orig[25]*256) + int(x_orig[26]*2**16) + int(x_orig[27]*2**24)
-            pbs = int(x_orig[34])
-            byte_rate = int(x_orig[28]) + int(x_orig[29]*256) + int(x_orig[30]*2**16) + int(x_orig[31]*2**24)
-            chunk_id = chr(int(x_orig[0])) + chr(int(x_orig[1])) + chr(int(x_orig[2])) + chr(int(x_orig[3]))
-            # if chunk_id == 'RIFF':
-            #    # chunk_id='RIFF' -> little endian data form. 'RIFX'-> big endian form.
-            #    header_len += 1
-            assert chunk_id == 'RIFF', 'ONLY RIIF format is supported'
+    
+        start_time = time.time()
+        x_orig = load_audiofile(input_file)
+        #TODO(malzantot) fix
+        # x_pbs = 1
+        num_channels = int(x_orig[22]) + int(x_orig[23]*256)
+        sample_rate = int(x_orig[24]) + int(x_orig[25]*256) + int(x_orig[26]*2**16) + int(x_orig[27]*2**24)
+        pbs = int(x_orig[34])
+        byte_rate = int(x_orig[28]) + int(x_orig[29]*256) + int(x_orig[30]*2**16) + int(x_orig[31]*2**24)
+        chunk_id = chr(int(x_orig[0])) + chr(int(x_orig[1])) + chr(int(x_orig[2])) + chr(int(x_orig[3]))
+        # if chunk_id == 'RIFF':
+        #    # chunk_id='RIFF' -> little endian data form. 'RIFX'-> big endian form.
+        #    header_len += 1
+        assert chunk_id == 'RIFF', 'ONLY RIIF format is supported'
 
-            if verbose:
-                print("chunk id = %s" %chunk_id)
-                print("bps = %d - num channels = %d - Sample rate = %d ." 
-                %(pbs, num_channels, sample_rate))
-                print("byte rate = %d" %(byte_rate))
+        if verbose:
+            print("chunk id = %s" %chunk_id)
+            print("bps = %d - num channels = %d - Sample rate = %d ." 
+            %(pbs, num_channels, sample_rate))
+            print("byte rate = %d" %(byte_rate))
 
-            assert pbs == 16, "Only PBS=16 is supported now" 
-            attack_output, iterations = generate_attack(x_orig, target_idx, eps_limit,
-                sess, input_node_name, output_node, max_iters, pbs, verbose)
-            save_audiofile(attack_output, output_dir+'/'+input_file)
-            end_time = time.time()
-            print("Attack done (%d iterations) in %0.4f seconds" %(iterations, (end_time-start_time)))
-                
-       
+        assert pbs == 16, "Only PBS=16 is supported now" 
+        attack_output, iterations = generate_attack(x_orig, target_idx, eps_limit,
+            sess, input_node_name, output_node, max_iters, pbs, verbose)
+        save_audiofile(attack_output, output_dir+'/'+input_file)
+        end_time = time.time()
+        print("Attack done (%d iterations) in %0.4f seconds" %(iterations, (end_time-start_time)))
+            
+   
 
 
 
