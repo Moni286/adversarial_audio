@@ -77,31 +77,30 @@ def crossover(x1, x2):
 #    return bytes(ba_new)
 
 def mutation(x, eps_limit):
-    ba = bytearray(x)
-    step = 2
-    #if pbs == 8:
-    #    step = 1
-    for i in range(header_len, len(x), step):
-        #if np.random.random() < 0.05:
-        # ba[i] = max(0, min(255, np.random.choice(list(range(ba[i]-4, ba[i]+4)))))
-        #elif np.random.random() < 0.10:
-        #ba[i] = max(0, min(255, ba[i] + np.random.choice([-1, 1])))
-        if np.random.random() < mutation_p:
-            int_x = int.from_bytes(ba[i:i+2], byteorder='big', signed=True)
-            new_int_x = min(data_max, max(data_min, int_x + np.random.choice(range(-eps_limit, eps_limit))))
-            new_bytes = int(new_int_x).to_bytes(2, byteorder='big', signed=True)
-            ba[i] = new_bytes[0]
-            ba[i+1] = new_bytes[1]
-    return bytes(ba)
+    xheaders = bytearray(x)[:44]
+    xbuf = bytes(bytearray(x)[44:])
+    xbuf = np.nan_to_num(np.frombuffer(xbuf, dtype=np.float16))
+    xstft = librosa.core.stft(xbuf).T
+    for t in range(xstft.shape[0]):
+        for f in range(xstft.shape[1]):
+            if np.random.random() < mutation_p:
+                xstft[t, f] = np.random.random())
+
+    xmutated = librosa.core.istft(xstft.T)
+    xbuf = xmutated
+    xbuf = xbuf.tobytes()
+    x_orig = bytes(bytearray(xheaders) + bytearray(xbuf))
+    return x_orig
+
 
 def score(sess, x, target, input_tensor, output_tensor):
-    global mutation_p
-    mutation_p_tmp = mutation_p
-    mutation_p = 0.01
-    xn = mutation(x, pbs)
-    mutation_p = mutation_p_tmp
+    #global mutation_p
+    #mutation_p_tmp = mutation_p
+    #mutation_p = 0.01
+    #xn = mutation(x, pbs)
+    #mutation_p = mutation_p_tmp
     output_preds, = sess.run(output_tensor,
-        feed_dict={input_tensor: xn})
+        feed_dict={input_tensor: x})
     return output_preds
 
 def generate_attack(x_orig, target, limit, sess, input_node,
