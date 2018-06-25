@@ -9,6 +9,7 @@ import time
 import tensorflow as tf
 sys.path.append("speech_commands/")
 import label_wav
+import librosa
 
 def load_graph(filename):
     with tf.gfile.FastGFile(filename, 'rb') as f:
@@ -53,16 +54,38 @@ def gen_population_member(x_orig, eps_limit):
             new_bytearray[i+1] = new_bytes[1]
     return bytes(new_bytearray)
 
+#def crossover(x1, x2):
+#    ba1 = bytearray(x1)
+#    ba2 = bytearray(x2)
+#    step = 2
+#    # if bps == 8:
+#    #    step = 1
+#    for i in range(header_len, len(x1), step):
+#        if np.random.random() < 0.5:
+#            ba2[i] = ba1[i]
+#    
+#    return bytes(ba2)
+
 def crossover(x1, x2):
-    ba1 = bytearray(x1)
-    ba2 = bytearray(x2)
-    step = 2
-    # if bps == 8:
-    #    step = 1
-    for i in range(header_len, len(x1), step):
+    x1data = x1[header_len:]
+    x1data = librosa.util.buf_to_float(x1data)
+
+    x2headers = x2[:header_len]
+    x2data = x2[header_len:]
+    x2data = librosa.util.buf_to_float(x2data)
+
+    x1stft = librosa.core.stft(x1data).T
+    x2stft = librosa.core.stft(x2data).T
+
+    for t in range(min(x2stft.shape[0], x1stft.shape[0])):
         if np.random.random() < 0.5:
-            ba2[i] = ba1[i]
-    return bytes(ba2)
+            x2stft[t] = x1stft[t]
+    
+    x2istft = librosa.core.istft(x2stft.T)
+    x2data[:x2istft.size] = x2istft
+    x2data = float(data_max+1) * x2data
+    x2data = x2data.astype(np.int16).tobytes()
+    return bytes(bytearray(x2headers) + bytearray(x2data))
 
 # def refine(x_new, x_orig, pbs=16, limit=10):
 #    ba_new = bytearray(x_new)
@@ -77,28 +100,43 @@ def crossover(x1, x2):
 #    return bytes(ba_new)
 
 def mutation(x, eps_limit):
-    xheaders = bytearray(x)[:44]
-    xbuf = bytes(bytearray(x)[44:])
-    xbuf = np.nan_to_num(np.frombuffer(xbuf, dtype=np.float16))
+    xheaders = x[:44]
+    xbuf = librosa.util.buf_to_float(x[44:])
+
     xstft = librosa.core.stft(xbuf).T
     for t in range(xstft.shape[0]):
         for f in range(xstft.shape[1]):
             if np.random.random() < mutation_p:
-                xstft[t, f] = np.random.random())
+                max_abs_xstft = np.max(np.abs(xstft[t]))
+                newval = max_abs_xstft * np.random.random() * 0.1
+                xstft[t, f] = max(newval, xstft[t, f])
 
     xmutated = librosa.core.istft(xstft.T)
-    xbuf = xmutated
-    xbuf = xbuf.tobytes()
+    xbuf[:xmutated.size] = xmutated
+    xbuf = xbuf * float(data_max + 1)
+    xbuf = xbuf.astype(np.int16).tobytes()
     x_orig = bytes(bytearray(xheaders) + bytearray(xbuf))
     return x_orig
 
+#def mutation(x, eps_limit):
+#    ba = bytearray(x)
+#    step = 2
+#    #if pbs == 8:
+#    #    step = 1
+#    for i in range(header_len, len(x), step):
+#        #if np.random.random() < 0.05:
+#        # ba[i] = max(0, min(255, np.random.choice(list(range(ba[i]-4, ba[i]+4)))))
+#        #elif np.random.random() < 0.10:
+#        #ba[i] = max(0, min(255, ba[i] + np.random.choice([-1, 1])))
+#        if np.random.random() < mutation_p:
+#            int_x = int.from_bytes(ba[i:i+2], byteorder='big', signed=True)
+#            new_int_x = min(data_max, max(data_min, int_x + np.random.choice(range(-eps_limit, eps_limit))))
+#            new_bytes = int(new_int_x).to_bytes(2, byteorder='big', signed=True)
+#            ba[i] = new_bytes[0]
+#            ba[i+1] = new_bytes[1]
+#    return bytes(ba)
 
 def score(sess, x, target, input_tensor, output_tensor):
-    #global mutation_p
-    #mutation_p_tmp = mutation_p
-    #mutation_p = 0.01
-    #xn = mutation(x, pbs)
-    #mutation_p = mutation_p_tmp
     output_preds, = sess.run(output_tensor,
         feed_dict={input_tensor: x})
     return output_preds
