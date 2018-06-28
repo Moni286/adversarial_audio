@@ -41,7 +41,7 @@ def gen_population_member(x_orig, eps_limit):
 
 def crossover(x1stft, x2stft):
     for t in range(min(x1stft.shape[0], x2stft.shape[0])):
-        if np.random.random() < mutation_p:
+        if np.random.random() < 0.5:
             x2stft[t] = x1stft[t]
     return x2stft
    
