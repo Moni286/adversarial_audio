@@ -37,34 +37,8 @@ data_min = -32768
 mutation_p = 0.0005
 
 def gen_population_member(x_orig, eps_limit):
-    new_bytearray = bytearray(x_orig)
-    # step = 2
-    # if bps == 8:
-    step = 2
-    for i in range(header_len, len(x_orig), step):
-        if np.random.random() < mutation_p:
-        #    if np.random.random() < 0.5:
-        #        new_bytearray[i] = min(255, new_bytearray[i]+1)
-        #    else:
-        #        new_bytearray[i] = max(0, new_bytearray[i]-1)
-            int_x = int.from_bytes(x_orig[i:i+2], byteorder='little', signed=True)
-            new_int_x = min(data_max, max(data_min, int_x + np.random.choice(range(-eps_limit, eps_limit))))
-            new_bytes = int(new_int_x).to_bytes(2, byteorder='little', signed=True)
-            new_bytearray[i] = new_bytes[0]
-            new_bytearray[i+1] = new_bytes[1]
-    return bytes(new_bytearray)
+    return mutation(x_orig, eps_limit)
 
-#def crossover(x1, x2):
-#    ba1 = bytearray(x1)
-#    ba2 = bytearray(x2)
-#    step = 2
-#    # if bps == 8:
-#    #    step = 1
-#    for i in range(header_len, len(x1), step):
-#        if np.random.random() < 0.5:
-#            ba2[i] = ba1[i]
-#    
-#    return bytes(ba2)
 
 def crossover(x1, x2):
     x1data = x1[header_len:]
@@ -118,28 +92,23 @@ def mutation(x, eps_limit):
     x_orig = bytes(bytearray(xheaders) + bytearray(xbuf))
     return x_orig
 
-#def mutation(x, eps_limit):
-#    ba = bytearray(x)
-#    step = 2
-#    #if pbs == 8:
-#    #    step = 1
-#    for i in range(header_len, len(x), step):
-#        #if np.random.random() < 0.05:
-#        # ba[i] = max(0, min(255, np.random.choice(list(range(ba[i]-4, ba[i]+4)))))
-#        #elif np.random.random() < 0.10:
-#        #ba[i] = max(0, min(255, ba[i] + np.random.choice([-1, 1])))
-#        if np.random.random() < mutation_p:
-#            int_x = int.from_bytes(ba[i:i+2], byteorder='big', signed=True)
-#            new_int_x = min(data_max, max(data_min, int_x + np.random.choice(range(-eps_limit, eps_limit))))
-#            new_bytes = int(new_int_x).to_bytes(2, byteorder='big', signed=True)
-#            ba[i] = new_bytes[0]
-#            ba[i+1] = new_bytes[1]
-#    return bytes(ba)
-
 def score(sess, x, target, input_tensor, output_tensor):
     output_preds, = sess.run(output_tensor,
         feed_dict={input_tensor: x})
     return output_preds
+
+def wav_stft(x):
+    xheaders = x[:header_len]
+    xdata = x[header_len:]
+
+    xdata = librosa.util.buf_to_float(xdata)
+    return xheaders, librosa.core.stft(xdata).T
+
+def wav_istft(xheaders, xstft):
+    xdata = librosa.core.istft(xstft.T)
+    xdata = float(data_max + 1) * xdata
+    xdata = xdata.astype(np.int16).tobytes()
+    return xheaders + xdata
 
 def generate_attack(x_orig, target, limit, sess, input_node,
     output_node, max_iters, eps_limit=256, verbose=False):

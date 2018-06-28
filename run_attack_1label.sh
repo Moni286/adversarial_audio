@@ -28,7 +28,7 @@ find "$dataset_dir/$target_label/" -name "*.wav" | sort -R \
 echo "Running attack: $source_label --> $target_label"
 output_dir="output/result/$target_label/$source_label"
 mkdir -p $output_dir
-python3 audio_attack.py \
+python3 stft_audio_attack.py \
 --data_dir="output/data/$source_label" \
 --output_dir=$output_dir \
 --target_label=$target_label \

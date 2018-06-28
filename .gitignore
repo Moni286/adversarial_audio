@@ -17,3 +17,6 @@ frozen_graph/
 *.wav
 data/*
 speech_dataset/
+
+# output
+output/*
