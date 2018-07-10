@@ -9,6 +9,7 @@ import time
 import tensorflow as tf
 sys.path.append("speech_commands/")
 import label_wav
+import librosa
 
 def load_graph(filename):
     with tf.gfile.FastGFile(filename, 'rb') as f:
@@ -34,6 +35,9 @@ header_len = 44
 data_max = 32767
 data_min = -32768
 mutation_p = 0.0005
+
+response = np.genfromtxt('/home/nyuad/Desktop/resp.csv', delimiter=',').T[1]
+response = np.exp(response)
 
 def gen_population_member(x_orig, eps_limit):
     new_bytearray = bytearray(x_orig)
@@ -94,16 +98,43 @@ def mutation(x, eps_limit):
             ba[i+1] = new_bytes[1]
     return bytes(ba)
 
+def wav_stft(x):
+    xheaders = x[:header_len]
+    xdata = x[header_len:]
+    xfooter = x[-((len(x) - header_len) % 512):]
+
+    xdata = librosa.util.buf_to_float(xdata, dtype=np.float16)
+    xstft = librosa.core.stft(xdata).T
+
+    return xheaders, xstft, xfooter
+
+def wav_istft(xheader, xstft, xfooter):
+    xdata = librosa.core.istft(xstft.T)
+    xdata *= data_max + 1
+    xdata = xdata.astype(np.int16).tobytes()
+
+    return xheader + xdata + xfooter
+
+def EOT(x):
+    xheader, xstft, xfooter = wav_stft(x)
+    xstft = xstft * response
+    x = wav_istft(xheader, xstft, xfooter)
+    return x
+
 def score(sess, x, target, input_tensor, output_tensor):
+    x = EOT(x)
+    
     output_preds, = sess.run(output_tensor,
         feed_dict={input_tensor: x})
     return output_preds
 
 def generate_attack(x_orig, target, limit, sess, input_node,
-    output_node, max_iters, eps_limit=256, verbose=False):
+    output_node, max_iters, eps_limit=256, verbose=True):
     pop_size = 20
     elite_size = 2
     temp = 0.01
+    iters = 0 
+    
     initial_pop = [gen_population_member(x_orig, eps_limit) for _ in range(pop_size)]
     for idx in range(max_iters):
         pop_scores = np.array([score(sess, x, target, input_node, output_node) for x in initial_pop])
@@ -115,9 +146,9 @@ def generate_attack(x_orig, target, limit, sess, input_node,
         top_pred = np.argmax(pop_scores[pop_ranks[0],:])
         if verbose:
             if top_pred == target:
-                print("*** SUCCESS ****")
+                print("**** SUCCESS ****")
         if top_pred == target:
-            return top_attack
+            return top_attack,iters
 
         scores_logits = np.exp(target_scores /temp)
         pop_probs = scores_logits / np.sum(scores_logits)
@@ -126,7 +157,8 @@ def generate_attack(x_orig, target, limit, sess, input_node,
             initial_pop[np.random.choice(pop_size, p=pop_probs)])
             for _ in range(pop_size - elite_size)]
         initial_pop = elite_set + [mutation(child, eps_limit) for child in child_set]
-    return top_attack
+        iters += 1
+    return top_attack, iters
         
 def save_audiofile(output, filename):        
     with open(filename, 'wb') as fh:
@@ -143,7 +175,7 @@ flags.DEFINE_string("target_label", "", "Target classification label")
 flags.DEFINE_integer("limit", 4, "Noise limit")
 flags.DEFINE_string("graph_path", "", "Path to frozen graph file.")
 flags.DEFINE_string("labels_path", "", "Path to labels file.")
-flags.DEFINE_boolean("verbose", False, "")
+flags.DEFINE_boolean("verbose", True, "")
 flags.DEFINE_integer("max_iters", 200, "Maxmimum number of iterations")
 FLAGS = flags.FLAGS
 
@@ -169,8 +201,9 @@ if __name__ == '__main__':
         print("Target label not found.")
         sys.exit(1)
     target_idx = target_idx[0]
-
+    
     load_graph(graph_path)
+    
     with tf.Session() as sess:
         output_node = sess.graph.get_tensor_by_name(output_node_name) 
         for input_file in wav_files_list:
@@ -189,17 +222,18 @@ if __name__ == '__main__':
             assert chunk_id == 'RIFF', 'ONLY RIIF format is supported'
 
             if verbose:
+                print("filename = %s" % input_file)
                 print("chunk id = %s" %chunk_id)
                 print("bps = %d - num channels = %d - Sample rate = %d ." 
                 %(pbs, num_channels, sample_rate))
                 print("byte rate = %d" %(byte_rate))
 
             assert pbs == 16, "Only PBS=16 is supported now" 
-            attack_output = generate_attack(x_orig, target_idx, eps_limit,
+            attack_output, iters = generate_attack(x_orig, target_idx, eps_limit,
                 sess, input_node_name, output_node, max_iters, pbs, verbose)
             save_audiofile(attack_output, output_dir+'/'+input_file)
             end_time = time.time()
-            print("Attack done (%d iterations) in %0.4f seconds" %(max_iters, (end_time-start_time)))
+            print("Attack done (%d iterations) in %0.4f seconds" %(iters, (end_time-start_time)))
                 
        
 
