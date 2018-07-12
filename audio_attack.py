@@ -10,6 +10,7 @@ import tensorflow as tf
 sys.path.append("speech_commands/")
 import label_wav
 import librosa
+from copy import deepcopy
 
 def load_graph(filename):
     with tf.gfile.FastGFile(filename, 'rb') as f:
@@ -34,7 +35,7 @@ def print_output(output_preds, labels):
 header_len = 44
 data_max = 32767
 data_min = -32768
-mutation_p = 0.0005
+mutation_p = 0.005
 
 response = np.genfromtxt('/home/nyuad/Desktop/resp.csv', delimiter=',').T[1]
 response = np.exp(response)
@@ -116,16 +117,18 @@ def wav_istft(xheader, xstft, xfooter):
     return xheader + xdata + xfooter
 
 def EOT(x):
-    xheader, xstft, xfooter = wav_stft(x)
-    xstft = xstft * response
-    x = wav_istft(xheader, xstft, xfooter)
-    return x
+    xn = bytes(x)
+    xheader, xstft, xfooter = wav_stft(xn)
+    for t in range(xstft.shape[0]):
+        xstft[t] *= response
+    xn = wav_istft(xheader, xstft, xfooter)
+    return xn
 
 def score(sess, x, target, input_tensor, output_tensor):
-    x = EOT(x)
+    xn = EOT(x)
     
     output_preds, = sess.run(output_tensor,
-        feed_dict={input_tensor: x})
+        feed_dict={input_tensor: xn})
     return output_preds
 
 def generate_attack(x_orig, target, limit, sess, input_node,
@@ -158,6 +161,7 @@ def generate_attack(x_orig, target, limit, sess, input_node,
             for _ in range(pop_size - elite_size)]
         initial_pop = elite_set + [mutation(child, eps_limit) for child in child_set]
         iters += 1
+    if verbose: print("--- NO SUCCESS ---")
     return top_attack, iters
         
 def save_audiofile(output, filename):        
